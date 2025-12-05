@@ -208,10 +208,6 @@ The generated OBJ files can be imported into:
 - Phillips, O.M. (1957). *"On the generation of waves by turbulent wind"* — Journal of Fluid Mechanics
 - Cooley, J.W. & Tukey, J.W. (1965). *"An algorithm for the machine calculation of complex Fourier series"*
 
-## License
-
-[Add your license here]
-
 ---
 
 **Note:** This is a CPU-based implementation suitable for offline rendering. For real-time applications, consider porting the FFT to GPU using CUDA or compute shaders.
