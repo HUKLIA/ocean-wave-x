@@ -1,374 +1,374 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include<cstdio>
-#include<cstdlib>
-#include <windows.h>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
+#include <cmath>
+#include <fstream>
+#include <sstream>
+#include <algorithm>
 #include <complex>
+
+#include "main.h"
 #include "phillips.h"
-#include"main.h"
+#include "FFT.h"
 
-int main(int argc, char* argv[])
+void printUsage(const char* programName) {
+    printf("Ocean Wave Simulation - Generates OBJ 3D models based on Phillips spectrum\n\n");
+    printf("Usage: %s [options]\n\n", programName);
+    printf("Modes:\n");
+    printf("  -i, --interactive   Interactive mode (enter parameters step by step)\n");
+    printf("  (no args)           Run with default parameters\n\n");
+    printf("Options:\n");
+    printf("  -h, --help          Show this help message\n");
+    printf("  -t, --time FLOAT    Total simulation time (default: 1.0)\n");
+    printf("  -n, --frames INT    Number of frames to generate (default: 3)\n");
+    printf("  -a, --amplitude FLOAT   Wave amplitude factor (default: 452.0)\n");
+    printf("  -s, --speed FLOAT   Wind speed in m/s (default: 100.0)\n");
+    printf("  -w, --winddir FLOAT Wind direction in degrees (default: 60.0)\n");
+    printf("  -p, --patch FLOAT   Patch size in meters (default: 100.0)\n");
+    printf("  -c, --choppy FLOAT  Choppy wave factor (default: -1.0)\n");
+    printf("  -r, --dirdep FLOAT  Directional dependency (default: 0.07)\n");
+    printf("\nExamples:\n");
+    printf("  %s -i                          # Interactive mode\n", programName);
+    printf("  %s -t 5.0 -n 10 -s 50.0        # 10 frames over 5 seconds\n", programName);
+    printf("  %s --time 10.0 --frames 20     # 20 frames over 10 seconds\n", programName);
+}
+
+void printParams(const SimParams& params, int numFrames) {
+    printf("Simulation Parameters:\n");
+    printf("  Amplitude:    %.2f\n", params.amplitude);
+    printf("  Patch Size:   %.2f m\n", params.patchSize);
+    printf("  Wind Speed:   %.2f m/s\n", params.windSpeed);
+    printf("  Wind Dir:     %.2f degrees (%.4f rad)\n", params.windDir * 180.0f / PI_F, params.windDir);
+    printf("  Dir Depend:   %.4f\n", params.dirDepend);
+    printf("  Total Time:   %.2f s\n", params.targetTime);
+    printf("  Num Frames:   %d\n", numFrames);
+    printf("  Delta Time:   %.4f s\n", params.deltaTime);
+    printf("  Choppy:       %.2f\n", params.lambda);
+    printf("  Grid Size:    %u x %u\n\n", GRID_SIZE, GRID_SIZE);
+}
+
+SimParams parseArgs(int argc, char* argv[], int& numFrames) {
+    SimParams params;
+    numFrames = 3;
+
+    for (int i = 1; i < argc; i++) {
+        if (strcmp(argv[i], "-h") == 0 || strcmp(argv[i], "--help") == 0) {
+            printUsage(argv[0]);
+            exit(0);
+        }
+        else if (strcmp(argv[i], "-i") == 0 || strcmp(argv[i], "--interactive") == 0) {
+            // Skip, handled in main
+        }
+        else if ((strcmp(argv[i], "-t") == 0 || strcmp(argv[i], "--time") == 0) && i + 1 < argc) {
+            params.targetTime = static_cast<float>(atof(argv[++i]));
+        }
+        else if ((strcmp(argv[i], "-n") == 0 || strcmp(argv[i], "--frames") == 0) && i + 1 < argc) {
+            numFrames = atoi(argv[++i]);
+        }
+        else if ((strcmp(argv[i], "-a") == 0 || strcmp(argv[i], "--amplitude") == 0) && i + 1 < argc) {
+            params.amplitude = static_cast<float>(atof(argv[++i]));
+        }
+        else if ((strcmp(argv[i], "-s") == 0 || strcmp(argv[i], "--speed") == 0) && i + 1 < argc) {
+            params.windSpeed = static_cast<float>(atof(argv[++i]));
+        }
+        else if ((strcmp(argv[i], "-w") == 0 || strcmp(argv[i], "--winddir") == 0) && i + 1 < argc) {
+            params.windDir = static_cast<float>(atof(argv[++i])) * PI_F / 180.0f;
+        }
+        else if ((strcmp(argv[i], "-p") == 0 || strcmp(argv[i], "--patch") == 0) && i + 1 < argc) {
+            params.patchSize = static_cast<float>(atof(argv[++i]));
+        }
+        else if ((strcmp(argv[i], "-c") == 0 || strcmp(argv[i], "--choppy") == 0) && i + 1 < argc) {
+            params.lambda = static_cast<float>(atof(argv[++i]));
+        }
+        else if ((strcmp(argv[i], "-r") == 0 || strcmp(argv[i], "--dirdep") == 0) && i + 1 < argc) {
+            params.dirDepend = static_cast<float>(atof(argv[++i]));
+        }
+        else {
+            printf("Unknown option: %s\n", argv[i]);
+            printUsage(argv[0]);
+            exit(1);
+        }
+    }
+
+    if (numFrames > 1) {
+        params.deltaTime = params.targetTime / (numFrames - 1);
+    }
+    else {
+        params.deltaTime = params.targetTime + 1.0f;
+    }
+
+    return params;
+}
+
+bool outputPPM(const std::string& filename,
+    const float* imageR, const float* imageG, const float* imageB)
 {
-	printf("Start to generate OBJFile\n");
-	printf(" \n");
+    std::ofstream fout(filename);
+    if (fout.fail()) return false;
 
-	test(argc, argv);
-	return 0;
+    fout << "P3\n" << WIDTH << " " << HEIGHT << "\n255\n";
 
+    for (unsigned int y = 0; y < HEIGHT; y++) {
+        for (unsigned int x = 0; x < WIDTH; x++) {
+            int idx = y * WIDTH + x;
+            fout << static_cast<int>(255 * std::clamp(imageR[idx], 0.0f, 1.0f)) << " ";
+            fout << static_cast<int>(255 * std::clamp(imageG[idx], 0.0f, 1.0f)) << " ";
+            fout << static_cast<int>(255 * std::clamp(imageB[idx], 0.0f, 1.0f)) << " ";
+        }
+        fout << "\n";
+    }
+
+    fout.close();
+    return true;
 }
 
-#define FFT_TEST 1
-#define PHILLIPS_TEST 1
-
-void IFFT_2D(const unsigned int mButterflyCount, float* imageRN, float* imageGIN, float* imageTR, float* imageTRI)
+bool outputOBJ(const std::string& filename,
+    const float* displacement,
+    const float* displacementDX, const float* displacementDY,
+    const float* slopeX, const float* slopeY,
+    float choppy)
 {
-	for (int i = 0; i < mButterflyCount; i++)
-	{
-		ButterflyIFFTY(imageRN,
-			imageGIN,
-			imageTR,
-			imageTRI, i);
+    std::ofstream fout(filename);
+    if (fout.fail()) return false;
 
-		swap<float*>(imageRN, imageTR);
-		swap<float*>(imageGIN, imageTRI);
+    fout << "# Ocean wave mesh\no OceanMesh\n\n";
 
-	}
+    float displacementScale = 0.1f;
+    for (unsigned int y = 0; y < HEIGHT; y++) {
+        for (unsigned int x = 0; x < WIDTH; x++) {
+            int idx = y * WIDTH + x;
+            float ox = x + displacementDX[idx] * displacementScale * choppy;
+            float oy = y + displacementDY[idx] * displacementScale * choppy;
+            float oz = displacement[idx];
+            fout << "v " << ox << " " << oy << " " << oz << "\n";
+        }
+    }
 
-	for (int i = 0; i < mButterflyCount; i++)
-	{
-		ButterflyIFFTX(imageRN,
-			imageGIN,
-			imageTR,
-			imageTRI, i);
+    fout << "\n";
 
-		swap<float*>(imageRN, imageTR);
-		swap<float*>(imageGIN, imageTRI);
+    for (unsigned int y = 0; y < HEIGHT; y++) {
+        for (unsigned int x = 0; x < WIDTH; x++) {
+            int idx = y * WIDTH + x;
+            float nx = -slopeX[idx];
+            float ny = -slopeY[idx];
+            float nz = 1.0f;
+            float len = sqrtf(nx * nx + ny * ny + nz * nz);
+            fout << "vn " << nx / len << " " << ny / len << " " << nz / len << "\n";
+        }
+    }
 
-	}
+    fout << "\nvt 0 0\n\n";
+
+    for (unsigned int y = 0; y < HEIGHT - 1; y++) {
+        for (unsigned int x = 0; x < WIDTH - 1; x++) {
+            int p = y * WIDTH + x + 1;
+            fout << "f " << p << "/1/" << p << " ";
+            fout << p + 1 << "/1/" << p + 1 << " ";
+            fout << p + WIDTH + 1 << "/1/" << p + WIDTH + 1 << " ";
+            fout << p + WIDTH << "/1/" << p + WIDTH << "\n";
+        }
+    }
+
+    fout.close();
+    return true;
 }
 
-bool outputPPM(std::string str, const float* imageR, const float* imageG, const float* imageB)
-{
-	std::ofstream fout(str);
-	if (fout.fail()) return false; //error
+int runSimulation(const SimParams& params, int numFrames) {
+    const size_t arraySize = WIDTH * HEIGHT;
+    const unsigned int butterflyCount = static_cast<unsigned int>(log2(static_cast<float>(WIDTH)));
 
-	constexpr int sc = 255;
+    float* heightReal = new float[arraySize]();
+    float* heightImag = new float[arraySize]();
+    float* tempReal = new float[arraySize]();
+    float* tempImag = new float[arraySize]();
+    float* dispX_real = new float[arraySize]();
+    float* dispX_imag = new float[arraySize]();
+    float* dispY_real = new float[arraySize]();
+    float* dispY_imag = new float[arraySize]();
+    float* slopeX_real = new float[arraySize]();
+    float* slopeX_imag = new float[arraySize]();
+    float* slopeY_real = new float[arraySize]();
+    float* slopeY_imag = new float[arraySize]();
+    float* displacement = new float[arraySize]();
+    float* displacementDX = new float[arraySize]();
+    float* displacementDY = new float[arraySize]();
+    float* finalSlopeX = new float[arraySize]();
+    float* finalSlopeY = new float[arraySize]();
 
-	fout << "P3\n";
-	fout << WIDTH << " " << HEIGHT << "\n";
-	fout << "255\n";
+    float* imageR = new float[arraySize]();
+    float* imageG = new float[arraySize]();
+    float* imageB = new float[arraySize]();
+    float* imageRI = new float[arraySize]();
+    float* imageGI = new float[arraySize]();
+    float* imageBI = new float[arraySize]();
+    float* imageTR = new float[arraySize]();
+    float* imageTG = new float[arraySize]();
+    float* imageTB = new float[arraySize]();
+    float* imageTRI = new float[arraySize]();
+    float* imageTGI = new float[arraySize]();
+    float* imageTBI = new float[arraySize]();
 
+    float t = 0.0f;
+    int frameCount = 0;
+    float totalMaxDisplacement = 0.0f;
 
+    printf("Starting simulation...\n\n");
 
-	for (int y = 0; y < HEIGHT; y++) {
+    while (frameCount < numFrames) {
+        generateSpectrumData(heightReal, heightImag, dispX_real, dispX_imag,
+            dispY_real, dispY_imag, slopeX_real, slopeX_imag,
+            slopeY_real, slopeY_imag, t, params);
 
-		for (int x = 0; x < WIDTH; x++) {
-			fout << sc * imageR[y * WIDTH + x] << " ";//red
-			fout << sc * imageG[y * WIDTH + x] << " ";//green
-			fout << sc * imageB[y * WIDTH + x] << " ";//blue
-		}
+        for (size_t i = 0; i < arraySize; i++) {
+            imageR[i] = fabsf(heightReal[i]);
+            imageG[i] = heightImag[i];
+            imageB[i] = 0.0f;
+            imageRI[i] = imageGI[i] = imageBI[i] = 0.0f;
+        }
 
-	}
+        IFFT_2D(butterflyCount, heightReal, heightImag, tempReal, tempImag);
+        IFFT_2D(butterflyCount, dispX_real, dispX_imag, tempReal, tempImag);
+        IFFT_2D(butterflyCount, dispY_real, dispY_imag, tempReal, tempImag);
+        IFFT_2D(butterflyCount, slopeX_real, slopeX_imag, tempReal, tempImag);
+        IFFT_2D(butterflyCount, slopeY_real, slopeY_imag, tempReal, tempImag);
 
+        float maxDisplacement = 0.0f;
+        const float signs[] = { 1.0f, -1.0f };
 
-	fout.close();
-	return true; //no error
+        for (unsigned int y = 0; y < HEIGHT; y++) {
+            for (unsigned int x = 0; x < WIDTH; x++) {
+                int idx = y * WIDTH + x;
+                float sign = signs[(x + y) & 1];
+
+                float disp = heightReal[idx] * sign;
+                displacement[idx] = disp;
+                maxDisplacement = std::max(fabsf(disp), maxDisplacement);
+
+                displacementDX[idx] = dispX_real[idx] * sign * params.lambda;
+                displacementDY[idx] = dispY_real[idx] * sign * params.lambda;
+                finalSlopeX[idx] = slopeX_real[idx] * sign;
+                finalSlopeY[idx] = slopeY_real[idx] * sign;
+            }
+        }
+
+        for (size_t i = 0; i < arraySize; i++) {
+            imageTR[i] = heightReal[i];
+            imageTG[i] = imageTB[i] = 0.0f;
+            imageTRI[i] = heightImag[i];
+            imageTGI[i] = imageTBI[i] = 0.0f;
+        }
+
+        totalMaxDisplacement = std::max(maxDisplacement, totalMaxDisplacement);
+
+        std::stringstream ss;
+        ss << "ocean_" << frameCount << ".obj";
+
+        if (!outputOBJ(ss.str(), displacement, displacementDX, displacementDY,
+            finalSlopeX, finalSlopeY, params.lambda)) {
+            printf("Error: Failed to write %s\n", ss.str().c_str());
+            return -1;
+        }
+
+        printf("Frame %d: t=%.3f, max_disp=%.4f, total_max=%.4f -> %s\n",
+            frameCount, t, maxDisplacement, totalMaxDisplacement, ss.str().c_str());
+
+        frameCount++;
+        t += params.deltaTime;
+    }
+
+    printf("\nSimulation complete!\n");
+    printf("Generated %d frames\n", frameCount);
+    printf("Total max displacement: %.4f\n", totalMaxDisplacement);
+
+    printf("\nGenerating PPM files...\n");
+    outputPPM("RGB.ppm", imageR, imageG, imageB);
+    printf("  RGB.ppm\n");
+    outputPPM("RGBI.ppm", imageRI, imageGI, imageBI);
+    printf("  RGBI.ppm\n");
+    outputPPM("TRGB.ppm", imageTR, imageTG, imageTB);
+    printf("  TRGB.ppm\n");
+    outputPPM("TRGBI.ppm", imageTRI, imageTGI, imageTBI);
+    printf("  TRGBI.ppm\n");
+
+    delete[] heightReal; delete[] heightImag; delete[] tempReal; delete[] tempImag;
+    delete[] dispX_real; delete[] dispX_imag; delete[] dispY_real; delete[] dispY_imag;
+    delete[] slopeX_real; delete[] slopeX_imag; delete[] slopeY_real; delete[] slopeY_imag;
+    delete[] displacement; delete[] displacementDX; delete[] displacementDY;
+    delete[] finalSlopeX; delete[] finalSlopeY;
+    delete[] imageR; delete[] imageG; delete[] imageB;
+    delete[] imageRI; delete[] imageGI; delete[] imageBI;
+    delete[] imageTR; delete[] imageTG; delete[] imageTB;
+    delete[] imageTRI; delete[] imageTGI; delete[] imageTBI;
+
+    return 0;
 }
 
+int main(int argc, char* argv[]) {
+    printf("========================================\n");
+    printf("   Ocean Wave Simulation Generator\n");
+    printf("========================================\n\n");
 
-bool outputOBJ1(std::string str, const float* imagedispacement, const float* imagedispacementDX, const float* imagedispacementDY, const float* htsx1, const float* htsy1) {
+    SimParams params;
+    int numFrames = 3;
 
-	ofstream fout(str);
-	if (fout.fail()) return false; //error
+    bool interactiveMode = false;
+    for (int i = 1; i < argc; i++) {
+        if (strcmp(argv[i], "-i") == 0 || strcmp(argv[i], "--interactive") == 0) {
+            interactiveMode = true;
+            break;
+        }
+    }
 
-	fout << "o Mesh" << endl;
+    if (interactiveMode) {
+        printf("Interactive Mode - Enter simulation parameters:\n");
+        printf("(Press Enter to use default value)\n\n");
 
-	for (int y = 0; y < HEIGHT; y++) {
-		for (int x = 0; x < WIDTH; x++) {
+        char input[256];
 
-			float iXY = 0.1;
+        printf("Total time (seconds) [1.0]: ");
+        if (fgets(input, sizeof(input), stdin) && input[0] != '\n')
+            params.targetTime = static_cast<float>(atof(input));
 
-			float ox = x + imagedispacementDX[y * WIDTH + x] * iXY;
-			float oy = y + imagedispacementDY[y * WIDTH + x] * iXY;
-			float z = imagedispacement[y * WIDTH + x];
-			fout << "v " << ox << " " << oy << " " << z << endl; // x = WIDTH , Y = HEIGHT
+        printf("Number of frames [3]: ");
+        if (fgets(input, sizeof(input), stdin) && input[0] != '\n')
+            numFrames = atoi(input);
 
+        printf("Wind speed (m/s) [100.0]: ");
+        if (fgets(input, sizeof(input), stdin) && input[0] != '\n')
+            params.windSpeed = static_cast<float>(atof(input));
 
-		}
-	}
+        printf("Amplitude [452.0]: ");
+        if (fgets(input, sizeof(input), stdin) && input[0] != '\n')
+            params.amplitude = static_cast<float>(atof(input));
 
-	for (int y = 0; y < HEIGHT; y++) {
-		for (int x = 0; x < WIDTH; x++) {
-			//float z = imagedispacement[y * WIDTH + x];
-			//vector3(0.0f - h_tilde_slopex[index].a,
-			// 1.0f,
-			// 0.0f - h_tilde_slopez[index].a).unit();
-			float nx = (0.0f - htsx1[y * WIDTH + x]);
-			float ny = (0.0f - htsy1[y * WIDTH + x]);
-			float nz = 1.0f;
-			float w = sqrt(nx * nx + ny * ny + nz * nz);
-			nx /= w;
-			ny /= w;
-			nz /= w;
+        printf("Wind direction (degrees) [60.0]: ");
+        if (fgets(input, sizeof(input), stdin) && input[0] != '\n')
+            params.windDir = static_cast<float>(atof(input)) * PI_F / 180.0f;
 
-			fout << "vn " << nx << " " << ny << " " << nz << endl; // x = WIDTH , Y = HEIGHT
+        printf("Patch size (meters) [100.0]: ");
+        if (fgets(input, sizeof(input), stdin) && input[0] != '\n')
+            params.patchSize = static_cast<float>(atof(input));
 
-		}
-	}
+        printf("Choppy factor [-1.0]: ");
+        if (fgets(input, sizeof(input), stdin) && input[0] != '\n')
+            params.lambda = static_cast<float>(atof(input));
 
-	fout << "vt " << 0 << " " << 0 << endl;
+        if (numFrames > 1)
+            params.deltaTime = params.targetTime / (numFrames - 1);
+        else
+            params.deltaTime = params.targetTime + 1.0f;
 
-	for (int y = 0; y < HEIGHT - 1; y++) {
-		for (int x = 0; x < WIDTH - 1; x++) {
-			int p = y * WIDTH + x + 1;
-			//		float z = sin(x)*sin(y);
-			//fout << "f " << 1 << " " << 2 << " " << WIDTH + 1  << endl;
-			//fout << "f " << 2 << " " << WIDTH + 1 << " " << WIDTH + 2 << endl;
-			int NPoint = p + 1;
-			int nexY = p + WIDTH;
-			int secondp = p + WIDTH + 1;
-			//fout << "f " << p << " " << NPoint << " " << secondp << " " << nexY << endl;
-			fout << "f " << p << "/1/" << p;
-			fout << " " << NPoint << "/1/" << NPoint;
-			fout << " " << secondp << "/1/" << secondp;
-			fout << " " << nexY << "/1/" << nexY << endl;
-		}
-		//int P = 1 ;
-		// int nextpoint = P + 1;
-		//X P nextpoint
-		// int secondP =  P+WIDTH + 1;
-		//y P+WIDTH  , secondP;
-	}
-	fout.close();
-	return true; //no error
-}
+        printf("\n");
+    }
+    else if (argc > 1) {
+        params = parseArgs(argc, argv, numFrames);
+    }
+    else {
+        if (numFrames > 1)
+            params.deltaTime = params.targetTime / (numFrames - 1);
+    }
 
+    printParams(params, numFrames);
 
-
-int test(int argc, char* argv[]) {
-
-	float* imageR = new float[WIDTH * HEIGHT];
-	float* imageG = new float[WIDTH * HEIGHT];
-	float* imageB = new float[WIDTH * HEIGHT];
-	float* imageRI = new float[WIDTH * HEIGHT];
-	float* imageGI = new float[WIDTH * HEIGHT];
-	float* imageBI = new float[WIDTH * HEIGHT];
-	float* imageTR = new float[WIDTH * HEIGHT];
-	float* imageTG = new float[WIDTH * HEIGHT];
-	float* imageTB = new float[WIDTH * HEIGHT];
-	float* imageTRI = new float[WIDTH * HEIGHT];
-	float* imageTGI = new float[WIDTH * HEIGHT];
-	float* imageTBI = new float[WIDTH * HEIGHT];
-	float* imageGIN = new float[WIDTH * HEIGHT];
-	float* imageRN = new float[WIDTH * HEIGHT];
-	float* htdx1 = new float[WIDTH * HEIGHT];
-	float* htdx2 = new float[WIDTH * HEIGHT];
-	float* htdy1 = new float[WIDTH * HEIGHT];
-	float* htdy2 = new float[WIDTH * HEIGHT];
-	float* htsx1 = new float[WIDTH * HEIGHT];
-	float* htsx2 = new float[WIDTH * HEIGHT];
-	float* htsy1 = new float[WIDTH * HEIGHT];
-	float* htsy2 = new float[WIDTH * HEIGHT];
-	float* imagedispacementDX = new float[HEIGHT * WIDTH];
-	float* imagedispacementDY = new float[HEIGHT * WIDTH];
-	float* SlopeX = new float[HEIGHT * WIDTH];
-	float* SlopeY = new float[HEIGHT * WIDTH];
-
-
-
-	std::complex<float>* ht = new std::complex<float>[spectrumW * spectrumH];
-
-	float* imagedispacement = new float[HEIGHT * WIDTH];
-	for (int y = 0; y < HEIGHT; y++) {
-
-		for (int x = 0; x < WIDTH; x++) {
-			imagedispacement[y * WIDTH + x] = sinf(x) * sinf(y); //cal
-		}
-	}
-
-
-	const unsigned int rowPitch = WIDTH;
-	const unsigned int cellPitch = rowPitch >> 3;
-	const unsigned int cellHeight = WIDTH >> 3;
-	const unsigned int imageSize = rowPitch * HEIGHT;
-	for (unsigned int n = 0; n < imageSize; n++)
-	{
-		unsigned int x = n % rowPitch;
-		unsigned int y = n / rowPitch;
-		unsigned int i = x / cellPitch;
-		unsigned int j = y / cellHeight;
-
-		if (i % 2 == j % 2)
-		{
-			imageR[y * WIDTH + x] = 0;//red
-			imageG[y * WIDTH + x] = 0;//green
-			imageB[y * WIDTH + x] = 0;//blue
-			imageRN[y * WIDTH + x] = 0;
-			imageGIN[y * WIDTH + x] = 0;
-		}
-		else
-		{
-			imageR[y * WIDTH + x] = 1.0;//red
-			imageG[y * WIDTH + x] = 1.0;//green
-			imageB[y * WIDTH + x] = 1.0;//blue
-			imageRN[y * WIDTH + x] = 1.0;//real
-			imageGIN[y * WIDTH + x] = 1.0;//green image
-		}
-		imageRI[y * WIDTH + x] = 0;//red
-		imageGI[y * WIDTH + x] = 0;//green
-		imageBI[y * WIDTH + x] = 0;//blue	
-		imageRN[y * WIDTH + x] = 0;
-		imageGIN[y * WIDTH + x] = 0;
-	}
-
-#if PHILLIPS_TEST
-
-	float t = 0.0f;
-	float dt = 0.5f;
-	float target_t = 1.0f;
-	float TAA = A;
-
-	if (argc > 1)
-	{
-		target_t = atof(argv[1]);
-		cout << "User parameter set Target t = " << target_t << endl;
-	}
-	if (argc > 2)
-	{
-		dt = atof(argv[2]);
-		cout << "User parameter set dt = " << dt << endl;
-	}
-	if (argc > 3)
-	{
-		TAA = atof(argv[3]);
-		cout << "User parameter set A = " << TAA;
-		cout << " \n" << endl;
-	}
-
-
-	unsigned int FileCount = 0;
-	float totalMaxDisplacement = 0.0f;
-	while (t <= target_t)
-	{
-		GenerateTextureSpectrumData(imageR, imageG, imageB, imageRN, imageGIN, t,
-			htdx1, htdy1, htsx1, htsy1,
-			htdx2, htdy2, htsx2, htsy2, TAA);
-
-#endif
-#if FFT_TEST
-
-		const int mButterflyCount = (int)log2(float(WIDTH));
-
-#if 0
-
-
-
-		for (int y = 0; y < HEIGHT; y++) {
-
-			for (int x = 0; x < WIDTH; x++) {
-				imageRN[y * WIDTH + x] = imageR[y * WIDTH + x];
-				imageGIN[y * WIDTH + x] = imageRI[y * WIDTH + x];
-			}
-		}
-
-		for (int i = 0; i < mButterflyCount; i++)
-		{
-			ButterflyFFTX(imageRN,
-				imageGIN,
-				imageTR,
-				imageTRI, i);
-
-			swap<float*>(imageRN, imageTR);
-			swap<float*>(imageGIN, imageTRI);
-
-		}
-
-		for (int i = 0; i < mButterflyCount; i++)
-		{
-			ButterflyFFTY(imageRN,
-				imageGIN,
-				imageTR,
-				imageTRI, i);
-
-			swap<float*>(imageRN, imageTR);
-			swap<float*>(imageGIN, imageTRI);
-
-		}
-
-#endif // 0
-		IFFT_2D(mButterflyCount, imageRN, imageGIN, imageTR, imageTRI);
-		IFFT_2D(mButterflyCount, htdx1, htdx2, imageTR, imageTRI);
-		IFFT_2D(mButterflyCount, htdy1, htdy2, imageTR, imageTRI);
-		IFFT_2D(mButterflyCount, htsx1, htsx2, imageTR, imageTRI);
-		IFFT_2D(mButterflyCount, htsy1, htsy2, imageTR, imageTRI);
-		// change hight
-#if 1
-
-		float maxDisplacement = 0.0f;
-		float lambda = -1.0f;
-		float sign;
-		float signs[] = { 1.0f, -1.0f };
-		for (int y = 0; y < HEIGHT; y++) {
-			for (int x = 0; x < WIDTH; x++) {
-				sign = signs[(x + y) & 1];
-
-				//height
-				const float disp = imageRN[y * WIDTH + x] * sign; //cal
-				imagedispacement[y * WIDTH + x] = disp;
-				maxDisplacement = max(fabs(disp), maxDisplacement);
-
-				imagedispacementDX[y * WIDTH + x] = htdx1[y * WIDTH + x] * sign * lambda;
-				imagedispacementDY[y * WIDTH + x] = htdy1[y * WIDTH + x] * sign * lambda;
-
-				//float htilde = ht_RE[y * NPlus + x];
-
-				SlopeX[y * WIDTH + x] = htsx1[y * WIDTH + x] * sign;
-				SlopeY[y * WIDTH + x] = htsy1[y * WIDTH + x] * sign;
-				//h_tilde_slopex[index] = h_tilde_slopex[index] * sign;
-				//h_tilde_slopez[index] = h_tilde_slopez[index] * sign;
-
-				//height
-			}
-		}
-#endif // displacement
-		//vertices[index1].y = h_tilde[index].a;
-#endif 
-
-
-		for (int y = 0; y < HEIGHT; y++) {
-			for (int x = 0; x < WIDTH; x++) {
-
-				imageR[y * WIDTH + x] = 0;
-				imageB[y * WIDTH + x] = 0;
-				imageG[y * WIDTH + x] = fabs(imagedispacement[y * WIDTH + x]);
-			}
-		}
-		string ObjFilename = "3dtest";
-		string ObjExt = ".obj";
-		stringstream ss;
-		ss << ObjFilename << FileCount << ObjExt;
-
-		totalMaxDisplacement = max(maxDisplacement, totalMaxDisplacement);
-
-		if (!outputOBJ1(ss.str(), imagedispacement, imagedispacementDX, imagedispacementDY, SlopeX, SlopeY)) { return -1; }
-
-
-		cout << "Generated Ocean OBJ 3D Model Successfully at t = " << t;
-		cout << " " << "Max Displacement = " << maxDisplacement;
-		cout << " " << "Total Max = " << totalMaxDisplacement;
-		cout << endl;
-
-
-		FileCount++;
-		t += dt;
-	}
-	cout << "Total Max = " << totalMaxDisplacement << endl;
-
-	if (!outputPPM("TRGB.ppm", imageTR, imageTG, imageTB)) { return -1; }
-	if (!outputPPM("RGB.ppm", imageR, imageG, imageB)) { return -1; }
-	if (!outputPPM("RGBI.ppm", imageRI, imageGI, imageBI)) { return -1; }
-	if (!outputPPM("TRGBI.ppm", imageTRI, imageTGI, imageTBI)) { return -1; }
-
-	//if (!anotherOutputObj("test.obj")) { return -1; }
-	return 0;//no error
+    return runSimulation(params, numFrames);
 }

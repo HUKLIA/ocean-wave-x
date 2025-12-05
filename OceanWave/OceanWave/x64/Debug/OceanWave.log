@@ -1,13 +1,5 @@
 ﻿  FFT.cpp
   main.cpp
-C:\Users\25847_7s0hfc9\Desktop\FFTwithPhilips\ocean-wave-x\OceanWave\OceanWave\main.cpp(25,20): warning C4018: '<': signed/unsigned mismatch
-C:\Users\25847_7s0hfc9\Desktop\FFTwithPhilips\ocean-wave-x\OceanWave\OceanWave\main.cpp(37,20): warning C4018: '<': signed/unsigned mismatch
-C:\Users\25847_7s0hfc9\Desktop\FFTwithPhilips\ocean-wave-x\OceanWave\OceanWave\main.cpp(89,14): warning C4305: 'initializing': truncation from 'double' to 'float'
-C:\Users\25847_7s0hfc9\Desktop\FFTwithPhilips\ocean-wave-x\OceanWave\OceanWave\main.cpp(185,43): warning C4244: 'argument': conversion from 'int' to 'float', possible loss of data
-C:\Users\25847_7s0hfc9\Desktop\FFTwithPhilips\ocean-wave-x\OceanWave\OceanWave\main.cpp(185,53): warning C4244: 'argument': conversion from 'int' to 'float', possible loss of data
-C:\Users\25847_7s0hfc9\Desktop\FFTwithPhilips\ocean-wave-x\OceanWave\OceanWave\main.cpp(233,18): warning C4244: '=': conversion from 'double' to 'float', possible loss of data
-C:\Users\25847_7s0hfc9\Desktop\FFTwithPhilips\ocean-wave-x\OceanWave\OceanWave\main.cpp(238,12): warning C4244: '=': conversion from 'double' to 'float', possible loss of data
-C:\Users\25847_7s0hfc9\Desktop\FFTwithPhilips\ocean-wave-x\OceanWave\OceanWave\main.cpp(243,13): warning C4244: '=': conversion from 'double' to 'float', possible loss of data
   phillips.cpp
   Generating Code...
-  OceanWave.vcxproj -> C:\Users\25847_7s0hfc9\Desktop\FFTwithPhilips\ocean-wave-x\OceanWave\x64\Debug\OceanWave.exe
+  OceanWave.vcxproj -> C:\Users\25847_7s0hfc9\Desktop\FFTwithPhilips\oceanwavenew\OceanWave\x64\Debug\OceanWave.exe

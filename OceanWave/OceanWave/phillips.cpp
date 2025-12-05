@@ -1,155 +1,130 @@
-#include"phillips.h"
+#include "phillips.h"
+#include <cmath>
+#include <cstdlib>
 
-float urand()
-{
-	return rand() / (float)RAND_MAX;
-}
-// Generates Gaussian random number with mean 0 and standard deviation 1.
-float gauss()
-{
-	float u1 = urand();
-	float u2 = urand();
-	if (u1 < 1e-6f)
-	{
-		u1 = 1e-6f;
-	}
-	return sqrtf(-2 * logf(u1)) * cosf(2 * PI_F * u2);
+float urand() {
+    return rand() / static_cast<float>(RAND_MAX);
 }
 
-float phillips(float Kx, float Ky, float Vdir, float V, float dir_depend, float TA)
-{
-
-	float k_squared = Kx * Kx + Ky * Ky;
-	if (k_squared == 0.0f)
-	{
-		return 0.0f;
-	}
-	// largest possible wave from constant wind of velocity v
-	float L = V * V / g;
-	float k_x = Kx / sqrtf(k_squared);
-	float k_y = Ky / sqrtf(k_squared);
-	float w_dot_k = k_x * cosf(Vdir) + k_y * sinf(Vdir);
-	float phillips = TA * expf(-1.0f / (k_squared * L * L)) / (k_squared * k_squared) *
-		w_dot_k * w_dot_k;
-	// filter out waves moving opposite to wind
-	if (w_dot_k < 0.0f)
-	{
-		phillips *= dir_depend;
-	}
-	// damp out waves with very small length w << l
-	//float w = L / 10000;
-	//phillips *= expf(-k_squared * w * w);
-	return phillips;
-}
-// Generate base heightfield in frequency space
-void generate_h0(std::complex<float>* h0, float TA)
-{
-	for (unsigned int y = 0; y <= meshSize; y++)
-	{
-		for (unsigned int x = 0; x <= meshSize; x++)
-		{
-			float kx = (-(int)meshSize / 2.0f + x) * (2.0f * PI_F / patchSize);
-			float ky = (-(int)meshSize / 2.0f + y) * (2.0f * PI_F / patchSize);
-			float P = sqrtf(phillips(kx, ky, windDir, windSpeed, dirDepend, TA));
-			if (kx == 0.0f && ky == 0.0f)
-			{
-				P = 0.0f;
-			}
-			float Er = gauss();
-			float Ei = gauss();
-			float h0_re = Er * P * SQRT_HALF_F;
-			float h0_im = Ei * P * SQRT_HALF_F;
-			int i = y * spectrumW + x;
-			h0[i] = std::complex<float>(h0_re, h0_im);
-		}
-	}
+// Generates Gaussian random number with mean 0 and standard deviation 1
+float gauss() {
+    float u1 = urand();
+    float u2 = urand();
+    if (u1 < 1e-6f) {
+        u1 = 1e-6f;
+    }
+    return sqrtf(-2.0f * logf(u1)) * cosf(2.0f * PI_F * u2);
 }
 
-complex<float> htilde0(int n_prime, int m_prime, float TA)
-{
-	std::complex<float> r(gauss(), gauss());
-	float kx = (-(int)meshSize / 2.0f + n_prime) * (2.0f * PI_F / patchSize);
-	float ky = (-(int)meshSize / 2.0f + m_prime) * (2.0f * PI_F / patchSize);
-	return r * sqrtf(phillips(kx, ky, windDir, windSpeed, dirDepend, TA));
+float phillips(float Kx, float Ky, const SimParams& params) {
+    float k_squared = Kx * Kx + Ky * Ky;
+    if (k_squared == 0.0f) {
+        return 0.0f;
+    }
+
+    // Largest possible wave from constant wind of velocity V
+    float L = params.windSpeed * params.windSpeed / GRAVITY;
+
+    float k_len = sqrtf(k_squared);
+    float k_x = Kx / k_len;
+    float k_y = Ky / k_len;
+
+    float w_dot_k = k_x * cosf(params.windDir) + k_y * sinf(params.windDir);
+
+    float ph = params.amplitude * expf(-1.0f / (k_squared * L * L)) /
+        (k_squared * k_squared) * w_dot_k * w_dot_k;
+
+    // Filter out waves moving opposite to wind
+    if (w_dot_k < 0.0f) {
+        ph *= params.dirDepend;
+    }
+
+    return ph;
 }
 
-complex<float> complex_exp(float arg)
-{
-	return std::complex<float>(cosf(arg), sinf(arg));
+std::complex<float> htilde0(int n_prime, int m_prime, const SimParams& params) {
+    std::complex<float> r(gauss(), gauss());
+    float kx = (-(static_cast<int>(GRID_SIZE) / 2.0f) + n_prime) * (2.0f * PI_F / params.patchSize);
+    float ky = (-(static_cast<int>(GRID_SIZE) / 2.0f) + m_prime) * (2.0f * PI_F / params.patchSize);
+    return r * sqrtf(phillips(kx, ky, params));
 }
-// Generate a Spectrum texture.
-void GenerateTextureSpectrumData(float* imageR, float* imageG, float* imageB, float* imageRN, float* imageGIN, float t,
-	float* htdx1, float* htdy1, float* htsx1, float* htsy1,
-	float* htdx2, float* htdy2, float* htsx2, float* htsy2, float TA)
+
+std::complex<float> complex_exp(float arg) {
+    return std::complex<float>(cosf(arg), sinf(arg));
+}
+
+void generateSpectrumData(
+    float* heightReal, float* heightImag,
+    float* dispX_real, float* dispX_imag,
+    float* dispY_real, float* dispY_imag,
+    float* slopeX_real, float* slopeX_imag,
+    float* slopeY_real, float* slopeY_imag,
+    float t, const SimParams& params)
 {
-	const UINT rowPitch = WIDTH * 1;
-	const UINT textureSize = rowPitch * HEIGHT;
-	const int N_PLUS_1 = meshSize + 1;
-	std::complex<float>* h0 = new std::complex<float>[N_PLUS_1 * N_PLUS_1];
-	std::complex<float>* h0mk_conj = new std::complex<float>[N_PLUS_1 * N_PLUS_1];
-	for (int m_prime = 0; m_prime < N_PLUS_1; ++m_prime)
-	{
-		for (int n_prime = 0; n_prime < N_PLUS_1; ++n_prime)
-		{
-			const int index = m_prime * N_PLUS_1 + n_prime;
-			h0[index] = htilde0(n_prime, m_prime, TA);
-			h0mk_conj[index] = std::conj(htilde0(-n_prime, -m_prime, TA));
-		}
-	}
+    const unsigned int rowPitch = WIDTH;
+    const int N_PLUS_1 = GRID_SIZE + 1;
 
-	// generate ht (htilde)
-	for (int m_prime = 0; m_prime < int(meshSize); ++m_prime)
-	{
-		for (int n_prime = 0; n_prime < int(meshSize); ++n_prime)
-		{
-			const int index = m_prime * N_PLUS_1 + n_prime;
-			const int n = m_prime * rowPitch + n_prime * 1;
-			complex<float> h0_k = h0[index];
-			complex<float> h0_mk = h0mk_conj[index];
-			// dispersion
-			float kx = (-(int)meshSize / 2.0f + n_prime) * (2.0f * PI_F / patchSize);
-			float ky = (-(int)meshSize / 2.0f + m_prime) * (2.0f * PI_F / patchSize);
-			float k_len = sqrtf(kx * kx + ky * ky);
-			float w = sqrtf(g * k_len);
-			complex<float> ht = h0_k * complex_exp(w * t) + h0_mk * complex_exp(-
-				w * t);
-			// fabs() used for display the image only
-			imageR[n] = fabs(ht.real());//red
-			imageG[n] = (ht.imag());//green
-			imageB[n] = 0;//blue
-			//imageTR[y * WIDTH + x] = ht_RE[y * N + x] * 0.5 + 0.5f;//red
-			//imageTG[y * WIDTH + x] = ht_IM[y * N + x] * 0.5 + 0.5f;//green
-			//imageTB[y * WIDTH + x] = 0;//blue
-			imageRN[n] = ht.real();
-			imageGIN[n] = ht.imag();
+    // Allocate h0 arrays
+    std::complex<float>* h0 = new std::complex<float>[N_PLUS_1 * N_PLUS_1];
+    std::complex<float>* h0mk_conj = new std::complex<float>[N_PLUS_1 * N_PLUS_1];
 
-			complex<float> htdx(0.0f, 0.0f);
-			complex<float> htdy(0.0f, 0.0f);
+    // Generate initial spectrum
+    for (int m_prime = 0; m_prime < N_PLUS_1; ++m_prime) {
+        for (int n_prime = 0; n_prime < N_PLUS_1; ++n_prime) {
+            const int index = m_prime * N_PLUS_1 + n_prime;
+            h0[index] = htilde0(n_prime, m_prime, params);
+            h0mk_conj[index] = std::conj(htilde0(-n_prime, -m_prime, params));
+        }
+    }
 
-			complex<float> htslopex(0.0f, 0.0f);
-			complex<float> htslopey(0.0f, 0.0f);
-			complex<float> htsx(0, kx);
-			complex<float> htsy(0, ky);
+    // Generate h-tilde for current time
+    for (int m_prime = 0; m_prime < static_cast<int>(GRID_SIZE); ++m_prime) {
+        for (int n_prime = 0; n_prime < static_cast<int>(GRID_SIZE); ++n_prime) {
+            const int index = m_prime * N_PLUS_1 + n_prime;
+            const int n = m_prime * rowPitch + n_prime;
 
-			htslopex = ht * htsx;
-			htslopey = ht * htsy;
+            std::complex<float> h0_k = h0[index];
+            std::complex<float> h0_mk = h0mk_conj[index];
 
-			if (k_len >= 0.000001f) {
-				complex<float> dxk(0, -kx / k_len);
-				complex<float> dyk(0, -ky / k_len);
-				htdx = ht * dxk;
-				htdy = ht * dyk;
-			}
+            // Dispersion relation
+            float kx = (-(static_cast<int>(GRID_SIZE) / 2.0f) + n_prime) * (2.0f * PI_F / params.patchSize);
+            float ky = (-(static_cast<int>(GRID_SIZE) / 2.0f) + m_prime) * (2.0f * PI_F / params.patchSize);
+            float k_len = sqrtf(kx * kx + ky * ky);
+            float omega = sqrtf(GRAVITY * k_len);
 
-			htdx1[n] = htdx.real();
-			htdy1[n] = htdy.real();
-			htsx1[n] = htsx.real();
-			htsy1[n] = htsy.real();
-			htdx2[n] = htdx.imag();
-			htdy2[n] = htdx.imag();
-			htsx2[n] = htdx.imag();
-			htsy2[n] = htdx.imag();
-		}
-	}
+            // h-tilde at time t
+            std::complex<float> ht = h0_k * complex_exp(omega * t) + h0_mk * complex_exp(-omega * t);
 
+            heightReal[n] = ht.real();
+            heightImag[n] = ht.imag();
+
+            // Displacement vectors
+            std::complex<float> htdx(0.0f, 0.0f);
+            std::complex<float> htdy(0.0f, 0.0f);
+
+            if (k_len >= 0.000001f) {
+                std::complex<float> dxk(0.0f, -kx / k_len);
+                std::complex<float> dyk(0.0f, -ky / k_len);
+                htdx = ht * dxk;
+                htdy = ht * dyk;
+            }
+
+            dispX_real[n] = htdx.real();
+            dispX_imag[n] = htdx.imag();
+            dispY_real[n] = htdy.real();
+            dispY_imag[n] = htdy.imag();
+
+            // Slope vectors
+            std::complex<float> htsx = ht * std::complex<float>(0.0f, kx);
+            std::complex<float> htsy = ht * std::complex<float>(0.0f, ky);
+
+            slopeX_real[n] = htsx.real();
+            slopeX_imag[n] = htsx.imag();
+            slopeY_real[n] = htsy.real();
+            slopeY_imag[n] = htsy.imag();
+        }
+    }
+
+    delete[] h0;
+    delete[] h0mk_conj;
 }

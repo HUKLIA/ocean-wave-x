@@ -3,5 +3,5 @@
     <Platform Name="x64" />
     <Platform Name="x86" />
   </Configurations>
-  <Project Path="OceanWave/OceanWave.vcxproj" />
+  <Project Path="OceanWave/OceanWave.vcxproj" Id="e1faaf59-1f45-49e9-a528-5cbd68e5a2f3" />
 </Solution>

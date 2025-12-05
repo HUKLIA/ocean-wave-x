@@ -1,31 +1,40 @@
 #pragma once
-#include "mydefine.h" 
 
-int myFFT(float* imageR,
-	float* imageRI,
-	float* imageTR,
-	float* imageTRI);
+#include "mydefine.h"
 
-void GetButterflyValues(unsigned int passIndex, unsigned int x, unsigned int& outindicesX, unsigned int& outindicesY,
-	float& outweightsX, float& outweightsY);
+// Get butterfly operation indices and weights for a given pass
+void getButterflyValues(
+    unsigned int passIndex,
+    unsigned int x,
+    unsigned int& outIndexX,
+    unsigned int& outIndexY,
+    float& outWeightX,
+    float& outWeightY);
 
-void ButterflyFFTX(float* imageR,
-	float* imageRI,
-	float* imageTR,
-	float* imageTRI, int PassIndex);
+// Forward FFT butterfly operations
+void butterflyFFT_X(
+    float* srcReal, float* srcImag,
+    float* dstReal, float* dstImag,
+    int passIndex);
 
-void ButterflyFFTY(float* imageR,
-	float* imageRI,
-	float* imageTR,
-	float* imageTRI, int PassIndex);
+void butterflyFFT_Y(
+    float* srcReal, float* srcImag,
+    float* dstReal, float* dstImag,
+    int passIndex);
 
+// Inverse FFT butterfly operations
+void butterflyIFFT_X(
+    float* srcReal, float* srcImag,
+    float* dstReal, float* dstImag,
+    int passIndex);
 
-void ButterflyIFFTX(float* imageR,
-	float* imageRI,
-	float* imageTR,
-	float* imageTRI, int PassIndex);
+void butterflyIFFT_Y(
+    float* srcReal, float* srcImag,
+    float* dstReal, float* dstImag,
+    int passIndex);
 
-void ButterflyIFFTY(float* imageR,
-	float* imageRI,
-	float* imageTR,
-	float* imageTRI, int PassIndex);
+// Complete 2D IFFT
+void IFFT_2D(
+    unsigned int butterflyCount,
+    float* dataReal, float* dataImag,
+    float* tempReal, float* tempImag);
