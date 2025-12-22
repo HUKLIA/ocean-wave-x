@@ -1,0 +1,21 @@
+# Build outputs
+x64/
+*.exe
+*.pdb
+*.obj
+*.lib
+*.iobj
+*.ipdb
+*.ilk
+*.recipe
+
+# Visual Studio
+.vscode/
+.vs/
+*.vcxproj.user
+*.suo
+*.user
+
+# Temporary files
+*.tmp
+*.log
