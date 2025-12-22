@@ -1,0 +1,8 @@
+﻿  FFT.cpp
+  main.cpp
+  phillips.cpp
+  Generating code
+  Previous IPDB was built with incompatible compiler, fall back to full compilation.
+  All 244 functions were compiled because no usable IPDB/IOBJ from previous compilation was found.
+  Finished generating code
+  OceanWave.vcxproj -> C:\Users\25847_7s0hfc9\Desktop\FFTwithPhilips\oceanwavenew\OceanWave\x64\Release\OceanWave.exe

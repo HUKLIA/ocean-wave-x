@@ -308,67 +308,112 @@ int main(int argc, char* argv[]) {
     printf("   Ocean Wave Simulation Generator\n");
     printf("========================================\n\n");
 
+    // Initialize with default parameters
     SimParams params;
+    params.targetTime = 1.0f;
+    params.deltaTime = 0.5f;
+    params.amplitude = 452.0f;
+    params.patchSize = 100.0f;
+    params.windSpeed = 100.0f;
+    params.windDir = 60.0f * PI_F / 180.0f;
+    params.dirDepend = 0.07f;
+    params.lambda = -1.0f;
+
     int numFrames = 3;
 
-    bool interactiveMode = false;
-    for (int i = 1; i < argc; i++) {
-        if (strcmp(argv[i], "-i") == 0 || strcmp(argv[i], "--interactive") == 0) {
-            interactiveMode = true;
+    // Handle command line arguments if provided
+    if (argc > 1) {
+        params = parseArgs(argc, argv, numFrames);
+        // Run once and exit
+        printParams(params, numFrames);
+        return runSimulation(params, numFrames);
+    }
+
+    // Interactive menu mode
+    while (true) {
+        printf("\n=== Main Menu ===\n");
+        printf("1. Run simulation with current parameters\n");
+        printf("2. Change simulation parameters\n");
+        printf("3. Show current parameters\n");
+        printf("4. Exit\n");
+        printf("Choose an option (1-4): ");
+
+        char input[256];
+        if (!fgets(input, sizeof(input), stdin)) {
             break;
+        }
+
+        int choice = atoi(input);
+
+        switch (choice) {
+            case 1: {
+                // Calculate deltaTime
+                if (numFrames > 1) {
+                    params.deltaTime = params.targetTime / (numFrames - 1);
+                } else {
+                    params.deltaTime = params.targetTime + 1.0f;
+                }
+
+                printParams(params, numFrames);
+                int result = runSimulation(params, numFrames);
+                if (result != 0) {
+                    printf("Simulation failed!\n");
+                }
+                break;
+            }
+            case 2: {
+                printf("\n--- Change Parameters ---\n");
+                printf("(Press Enter to keep current value)\n\n");
+
+                printf("Total time (seconds) [%.2f]: ", params.targetTime);
+                if (fgets(input, sizeof(input), stdin) && input[0] != '\n')
+                    params.targetTime = static_cast<float>(atof(input));
+
+                printf("Number of frames [%d]: ", numFrames);
+                if (fgets(input, sizeof(input), stdin) && input[0] != '\n')
+                    numFrames = atoi(input);
+
+                printf("Wind speed (m/s) [%.2f]: ", params.windSpeed);
+                if (fgets(input, sizeof(input), stdin) && input[0] != '\n')
+                    params.windSpeed = static_cast<float>(atof(input));
+
+                printf("Amplitude [%.2f]: ", params.amplitude);
+                if (fgets(input, sizeof(input), stdin) && input[0] != '\n')
+                    params.amplitude = static_cast<float>(atof(input));
+
+                printf("Wind direction (degrees) [%.2f]: ", params.windDir * 180.0f / PI_F);
+                if (fgets(input, sizeof(input), stdin) && input[0] != '\n')
+                    params.windDir = static_cast<float>(atof(input)) * PI_F / 180.0f;
+
+                printf("Patch size (meters) [%.2f]: ", params.patchSize);
+                if (fgets(input, sizeof(input), stdin) && input[0] != '\n')
+                    params.patchSize = static_cast<float>(atof(input));
+
+                printf("Choppy factor [%.2f]: ", params.lambda);
+                if (fgets(input, sizeof(input), stdin) && input[0] != '\n')
+                    params.lambda = static_cast<float>(atof(input));
+
+                printf("Directional dependency [%.4f]: ", params.dirDepend);
+                if (fgets(input, sizeof(input), stdin) && input[0] != '\n')
+                    params.dirDepend = static_cast<float>(atof(input));
+
+                printf("\nParameters updated!\n");
+                break;
+            }
+            case 3: {
+                printParams(params, numFrames);
+                break;
+            }
+            case 4: {
+                printf("Goodbye!\n");
+                return 0;
+            }
+            default: {
+                printf("Invalid choice. Please enter 1-4.\n");
+                break;
+            }
         }
     }
 
-    if (interactiveMode) {
-        printf("Interactive Mode - Enter simulation parameters:\n");
-        printf("(Press Enter to use default value)\n\n");
-
-        char input[256];
-
-        printf("Total time (seconds) [1.0]: ");
-        if (fgets(input, sizeof(input), stdin) && input[0] != '\n')
-            params.targetTime = static_cast<float>(atof(input));
-
-        printf("Number of frames [3]: ");
-        if (fgets(input, sizeof(input), stdin) && input[0] != '\n')
-            numFrames = atoi(input);
-
-        printf("Wind speed (m/s) [100.0]: ");
-        if (fgets(input, sizeof(input), stdin) && input[0] != '\n')
-            params.windSpeed = static_cast<float>(atof(input));
-
-        printf("Amplitude [452.0]: ");
-        if (fgets(input, sizeof(input), stdin) && input[0] != '\n')
-            params.amplitude = static_cast<float>(atof(input));
-
-        printf("Wind direction (degrees) [60.0]: ");
-        if (fgets(input, sizeof(input), stdin) && input[0] != '\n')
-            params.windDir = static_cast<float>(atof(input)) * PI_F / 180.0f;
-
-        printf("Patch size (meters) [100.0]: ");
-        if (fgets(input, sizeof(input), stdin) && input[0] != '\n')
-            params.patchSize = static_cast<float>(atof(input));
-
-        printf("Choppy factor [-1.0]: ");
-        if (fgets(input, sizeof(input), stdin) && input[0] != '\n')
-            params.lambda = static_cast<float>(atof(input));
-
-        if (numFrames > 1)
-            params.deltaTime = params.targetTime / (numFrames - 1);
-        else
-            params.deltaTime = params.targetTime + 1.0f;
-
-        printf("\n");
-    }
-    else if (argc > 1) {
-        params = parseArgs(argc, argv, numFrames);
-    }
-    else {
-        if (numFrames > 1)
-            params.deltaTime = params.targetTime / (numFrames - 1);
-    }
-
-    printParams(params, numFrames);
-
-    return runSimulation(params, numFrames);
+    return 0;
 }
